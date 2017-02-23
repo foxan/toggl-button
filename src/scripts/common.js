@@ -104,7 +104,7 @@ var togglbutton = {
   currentDescription: "",
   fullPageHeight: getFullPageHeight(),
   fullVersion: "TogglButton",
-  render: function (selector, opts, renderer, mutationClass) {
+  render: function (selector, opts, renderer, mutationSelector) {
     chrome.runtime.sendMessage({type: 'activate'}, function (response) {
       if (response.success) {
         try {
@@ -115,11 +115,16 @@ var togglbutton = {
           togglbutton.duration_format = response.user.duration_format;
           if (opts.observe) {
             var observer = new MutationObserver(function (mutations) {
-              // If mutationClass is defined render the start timer link only when this element is changed
-              if (!!mutationClass
-                  && mutations[0].target.className.indexOf(mutationClass) === -1) {
+              // If mutationSelector is defined, render the start timer link only when an element
+              // matching the selector changes.
+              // Multiple selectors can be used by comma separating them.
+              var matches = mutations.filter(function (mutation) {
+                return mutation.target.matches(mutationSelector);
+              });
+              if (!!mutationSelector && !matches.length) {
                 return;
               }
+
               togglbutton.renderTo(selector, renderer);
             });
             observer.observe(document, {childList: true, subtree: true});
@@ -204,7 +209,7 @@ var togglbutton = {
 
     togglbutton.toggleBillable(premium);
 
-    if (!no_overwrite && project.billable) {
+    if (!no_overwrite && (pid !== 0 && project.billable)) {
       togglbutton.$billable.classList.toggle("tb-checked", true);
     }
   },
@@ -248,7 +253,7 @@ var togglbutton = {
       togglButtonDescription.value = response.entry.description || "";
 
       projectAutocomplete.setup(pid, tid);
-      tagAutocomplete.setup(response.entry.tags);
+      tagAutocomplete.setup(response.entry.tags, response.entry.wid);
       togglbutton.setupBillable(!!response.entry.billable, pid);
 
       editForm.style.left = position.left + "px";
@@ -305,6 +310,7 @@ var togglbutton = {
     setCursorAtBeginning(togglButtonDescription);
     projectAutocomplete.setup(pid, tid);
     tagAutocomplete.setSelected(response.entry.tags);
+    tagAutocomplete.setWorkspaceId(response.entry.wid);
 
     togglbutton.setupBillable(!!response.entry.billable, pid);
 
@@ -367,6 +373,13 @@ var togglbutton = {
         e.stopPropagation();
         e.preventDefault();
       }
+    });
+
+    projectAutocomplete.onChange(function (selected) {
+      var project = togglbutton.findProjectByPid(selected.pid),
+        wid = project ? project.wid : response.entry.wid;
+
+      tagAutocomplete.setWorkspaceId(wid);
     });
 
     document.addEventListener("click", handler);
